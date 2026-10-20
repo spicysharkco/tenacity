@@ -2278,6 +2278,24 @@ class TestReferenceCycles:
         assert count_garbage(always_retried) == 0
         assert always_retried.statistics["attempt_number"] == 3
 
+    def test_clears_the_list_it_iterated(self) -> None:
+        iterated: list[typing.Any] = []
+        replacement: list[typing.Any] = [print]
+
+        def before(retry_state: RetryCallState) -> None:
+            # Another call on the same controller starts a new iteration and
+            # replaces the list while this one is still running.
+            iterated.append(controller.iter_state.actions)
+            controller.iter_state.reset()
+            controller.iter_state.actions = replacement
+
+        controller = Retrying(stop=tenacity.stop_after_attempt(3), before=before)
+        retry_state = RetryCallState(controller, fn=None, args=(), kwargs={})
+        controller.iter(retry_state)
+
+        assert iterated[0] == []
+        assert replacement == [print]
+
 
 class TestInvokeAsCallable:
     """Test direct invocation of Retrying as a callable."""

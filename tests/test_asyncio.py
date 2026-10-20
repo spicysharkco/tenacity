@@ -735,6 +735,24 @@ class TestAsyncReferenceCycles:
         assert count_async_garbage(always_retried) == 0
         assert always_retried.statistics["attempt_number"] == 3
 
+    def test_clears_the_list_it_iterated(self) -> None:
+        iterated: list[Any] = []
+        replacement: list[Any] = [print]
+
+        async def before(retry_state: RetryCallState) -> None:
+            # Another call on the same controller starts a new iteration and
+            # replaces the list while this one is still running.
+            iterated.append(controller.iter_state.actions)
+            controller.iter_state.reset()
+            controller.iter_state.actions = replacement
+
+        controller = AsyncRetrying(stop=stop_after_attempt(3), before=before)
+        retry_state = RetryCallState(controller, fn=None, args=(), kwargs={})
+        asyncio.run(controller.iter(retry_state))
+
+        assert iterated[0] == []
+        assert replacement == [print]
+
 
 if __name__ == "__main__":
     unittest.main()
